@@ -17,4 +17,4 @@ matroska = { version = "0.1.0", git = "https://github.com/rust-av/matroska" }
 av-vorbis = { git = "https://github.com/rust-av/av-vorbis" }
 libopus = { version = "0.1.0", git = "https://github.com/rust-av/opus-rs", features = ["codec-trait"] }
 libvpx = { version = "0.1.0", git = "https://github.com/rust-av/vpx-rs", features = ["codec-trait"] }
-# thiserror = "1.0.30"
+thiserror = "1.0.30"

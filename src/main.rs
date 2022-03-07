@@ -13,24 +13,30 @@ use codec::decoder::Codecs as DecCodecs;
 use codec::decoder::Context as DecContext;
 use data::frame::FrameBufferConv;
 use data::frame::{ArcFrame, MediaKind};
-use data::packet::Packet;
 use data::params;
-use data::pixel::Formaton;
-use data::timeinfo::TimeInfo;
 use format::buffer::AccReader;
 use format::demuxer::{Context, Event};
+use image::ImageError;
 use image::Rgba;
 use image::RgbaImage;
 use libopus::decoder::OPUS_DESCR;
 use libvpx::decoder::VP9_DESCR;
 use matroska::demuxer::MkvDemuxer;
 use std::path::Path;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ThumbnailerError {
-    Format(av_format::error::Error),
-    Codec(av_codec::error::Error),
-    Io(std::io::Error),
+    #[error("format error: {0}")]
+    Format(#[from] format::error::Error),
+    #[error("codec error: {0}")]
+    Codec(#[from] codec::error::Error),
+    #[error("frame error: {0}")]
+    Frame(#[from] data::frame::FrameError),
+    #[error("image error: {0}")]
+    Image(#[from] ImageError),
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 struct Thumbnailer {
@@ -41,26 +47,22 @@ struct Thumbnailer {
 
 fn main() {
     let output_path = "assets/assets_bbb-vp9-opus.png";
-    let mut th = Thumbnailer::from_path("assets/assets_bbb-vp9-opus.webm", output_path).unwrap();
+    let mut th = Thumbnailer::from_path("assets/assets_bbb-vp9-opus.webm").unwrap();
 
     th.save_image(output_path);
-    // th.save_image(output_path);
-    // th.save_image(output_path);
-    // th.save_image(output_path);
 }
 
 impl Thumbnailer {
-    pub fn from_path<P: ?Sized, O: ?Sized>(path: &P, output: &O) -> Result<Self, ThumbnailerError>
+    pub fn from_path<P: ?Sized>(path: &P) -> Result<Self, ThumbnailerError>
     where
         P: AsRef<Path>,
-        O: AsRef<Path>,
     {
-        let r = File::open(path).unwrap();
+        let r = File::open(path)?;
         let ar = AccReader::with_capacity(4 * 1024, r);
 
         let mut c = Context::new(Box::new(MkvDemuxer::new()), Box::new(ar));
 
-        c.read_headers().unwrap();
+        c.read_headers()?;
 
         let decoders = DecCodecs::from_list(&[VP9_DESCR, OPUS_DESCR, VORBIS_DESCR]);
 
@@ -74,7 +76,7 @@ impl Thumbnailer {
                     if let Some(ref extradata) = st.params.extradata {
                         ctx.set_extradata(extradata);
                     }
-                    ctx.configure().unwrap();
+                    ctx.configure()?;
                     decs.insert(st.index as isize, ctx);
                     match st.params.kind {
                         Some(params::MediaKind::Video(ref info)) => {
@@ -83,9 +85,6 @@ impl Thumbnailer {
                             println!("{}x{}", width, height);
                             video_info = Some(info.clone());
                         }
-                        // Some(params::MediaKind::Audio(ref info)) => {
-                        //     audio_info = Some(info.clone());
-                        // }
                         _ => {}
                     }
                 }
@@ -99,8 +98,6 @@ impl Thumbnailer {
     }
 
     fn save_image(&mut self, output_path: &str) {
-        let width = 640;
-        let height = 360;
         // self.decode_one();
         let mut frame_idx = 0;
         while let Ok(data) = self.decode_one() {
@@ -110,7 +107,7 @@ impl Thumbnailer {
                         println!("{:#?}", frame.t);
 
                         if frame.t.pts == Some(960) {
-                            frame_to_image(frame, width, height, output_path);
+                            self.frame_to_image(frame, self.width(), self.height(), output_path);
                         }
                     }
                     _ => {}
@@ -129,7 +126,7 @@ impl Thumbnailer {
                     // Choose the right decoder for the packet
                     let pkt_index = &pkt.stream_index;
                     if let Some(decoder) = self.decoders.get_mut(pkt_index) {
-                        decoder.send_packet(&pkt).unwrap();
+                        decoder.send_packet(&pkt);
                         Ok(decoder.receive_frame().ok())
                     } else {
                         // If a packet cannot be decoded, it will be skipped
@@ -156,31 +153,40 @@ impl Thumbnailer {
             }
         }
     }
-}
 
-fn frame_to_image(
-    frame: std::sync::Arc<data::frame::Frame>,
-    width: usize,
-    height: i32,
-    output_path: &str,
-) {
-    let y_plane: &[u8] = frame.buf.as_slice(0).unwrap();
-    let y_stride = frame.buf.linesize(0).unwrap() as usize;
-    let u_plane: &[u8] = frame.buf.as_slice(1).unwrap();
-    //let u_stride = frame.buf.linesize(1).unwrap() as usize;
-    let v_plane: &[u8] = frame.buf.as_slice(2).unwrap();
-    //let v_stride = frame.buf.linesize(2).unwrap() as usize;
-    let img = RgbaImage::from_fn(width as u32, height as u32, |x, y| {
-        let (cx, cy) = (x as usize, y as usize);
-        let y = y_plane[cy * y_stride + cx] as f64;
-        let u = u_plane[cy / 2 * width / 2 + cx / 2] as f64;
-        let v = v_plane[cy / 2 * width / 2 + cx / 2] as f64;
-        let r = 1.164 * (y - 16.0) + 1.596 * (v - 128.0);
-        let g = 1.164 * (y - 16.0) - 0.391 * (u - 128.0) - 0.813 * (v - 128.0);
-        let b = 1.164 * (y - 16.0) + 2.018 * (u - 128.0);
-        Rgba([clamp(r), clamp(g), clamp(b), 255])
-    });
-    img.save(output_path).unwrap();
+    fn frame_to_image(
+        &self,
+        frame: std::sync::Arc<data::frame::Frame>,
+        width: usize,
+        height: usize,
+        output_path: &str,
+    ) -> Result<(), ThumbnailerError> {
+        let y_plane: &[u8] = frame.buf.as_slice(0)?;
+        let y_stride = frame.buf.linesize(0)? as usize;
+        let u_plane: &[u8] = frame.buf.as_slice(1)?;
+        //let u_stride = frame.buf.linesize(1).unwrap() as usize;
+        let v_plane: &[u8] = frame.buf.as_slice(2)?;
+        //let v_stride = frame.buf.linesize(2).unwrap() as usize;
+        let img = RgbaImage::from_fn(width as u32, height as u32, |x, y| {
+            let (cx, cy) = (x as usize, y as usize);
+            let y = y_plane[cy * y_stride + cx] as f64;
+            let u = u_plane[cy / 2 * width / 2 + cx / 2] as f64;
+            let v = v_plane[cy / 2 * width / 2 + cx / 2] as f64;
+            let r = 1.164 * (y - 16.0) + 1.596 * (v - 128.0);
+            let g = 1.164 * (y - 16.0) - 0.391 * (u - 128.0) - 0.813 * (v - 128.0);
+            let b = 1.164 * (y - 16.0) + 2.018 * (u - 128.0);
+            Rgba([clamp(r), clamp(g), clamp(b), 255])
+        });
+        img.save(output_path)?;
+        Ok(())
+    }
+
+    fn width(&self) -> usize {
+        self.video.as_ref().unwrap().width
+    }
+    fn height(&self) -> usize {
+        self.video.as_ref().unwrap().height
+    }
 }
 
 fn clamp(value: f64) -> u8 {

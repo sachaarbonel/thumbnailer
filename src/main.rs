@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::fs::File;
+use std::io::Seek;
+use std::io::SeekFrom;
 use std::path;
 
 use av_codec as codec;
@@ -14,6 +16,7 @@ use data::frame::{ArcFrame, MediaKind};
 use data::packet::Packet;
 use data::params;
 use data::pixel::Formaton;
+use data::timeinfo::TimeInfo;
 use format::buffer::AccReader;
 use format::demuxer::{Context, Event};
 use image::Rgba;
@@ -104,23 +107,11 @@ impl Thumbnailer {
             if let Some(frame) = data {
                 match frame.kind {
                     MediaKind::Video(_) => {
-                        let y_plane: &[u8] = frame.buf.as_slice(0).unwrap();
-                        let y_stride = frame.buf.linesize(0).unwrap() as usize;
-                        let u_plane: &[u8] = frame.buf.as_slice(1).unwrap();
-                        //let u_stride = frame.buf.linesize(1).unwrap() as usize;
-                        let v_plane: &[u8] = frame.buf.as_slice(2).unwrap();
-                        //let v_stride = frame.buf.linesize(2).unwrap() as usize;
-                        let img = RgbaImage::from_fn(width as u32, height as u32, |x, y| {
-                            let (cx, cy) = (x as usize, y as usize);
-                            let y = y_plane[cy * y_stride + cx] as f64;
-                            let u = u_plane[cy / 2 * width / 2 + cx / 2] as f64;
-                            let v = v_plane[cy / 2 * width / 2 + cx / 2] as f64;
-                            let r = 1.164 * (y - 16.0) + 1.596 * (v - 128.0);
-                            let g = 1.164 * (y - 16.0) - 0.391 * (u - 128.0) - 0.813 * (v - 128.0);
-                            let b = 1.164 * (y - 16.0) + 2.018 * (u - 128.0);
-                            Rgba([clamp(r), clamp(g), clamp(b), 255])
-                        });
-                        img.save(output_path).unwrap();
+                        println!("{:#?}", frame.t);
+
+                        if frame.t.pts == Some(960) {
+                            frame_to_image(frame, width, height, output_path);
+                        }
                     }
                     _ => {}
                 }
@@ -165,6 +156,31 @@ impl Thumbnailer {
             }
         }
     }
+}
+
+fn frame_to_image(
+    frame: std::sync::Arc<data::frame::Frame>,
+    width: usize,
+    height: i32,
+    output_path: &str,
+) {
+    let y_plane: &[u8] = frame.buf.as_slice(0).unwrap();
+    let y_stride = frame.buf.linesize(0).unwrap() as usize;
+    let u_plane: &[u8] = frame.buf.as_slice(1).unwrap();
+    //let u_stride = frame.buf.linesize(1).unwrap() as usize;
+    let v_plane: &[u8] = frame.buf.as_slice(2).unwrap();
+    //let v_stride = frame.buf.linesize(2).unwrap() as usize;
+    let img = RgbaImage::from_fn(width as u32, height as u32, |x, y| {
+        let (cx, cy) = (x as usize, y as usize);
+        let y = y_plane[cy * y_stride + cx] as f64;
+        let u = u_plane[cy / 2 * width / 2 + cx / 2] as f64;
+        let v = v_plane[cy / 2 * width / 2 + cx / 2] as f64;
+        let r = 1.164 * (y - 16.0) + 1.596 * (v - 128.0);
+        let g = 1.164 * (y - 16.0) - 0.391 * (u - 128.0) - 0.813 * (v - 128.0);
+        let b = 1.164 * (y - 16.0) + 2.018 * (u - 128.0);
+        Rgba([clamp(r), clamp(g), clamp(b), 255])
+    });
+    img.save(output_path).unwrap();
 }
 
 fn clamp(value: f64) -> u8 {

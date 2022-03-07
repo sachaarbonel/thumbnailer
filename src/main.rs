@@ -1,8 +1,5 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::Seek;
-use std::io::SeekFrom;
-use std::path;
 
 use av_codec as codec;
 use av_data as data;
@@ -67,10 +64,8 @@ impl Thumbnailer {
         let decoders = DecCodecs::from_list(&[VP9_DESCR, OPUS_DESCR, VORBIS_DESCR]);
 
         let mut video_info = None;
-        // let mut audio_info    = None;
         let mut decs: HashMap<isize, DecContext> = HashMap::with_capacity(2);
         for st in &c.info.streams {
-            // TODO stream selection
             if let Some(ref codec_id) = st.params.codec_id {
                 if let Some(mut ctx) = DecContext::by_name(&decoders, codec_id) {
                     if let Some(ref extradata) = st.params.extradata {
@@ -98,7 +93,6 @@ impl Thumbnailer {
     }
 
     fn save_image(&mut self, output_path: &str) {
-        // self.decode_one();
         let mut frame_idx = 0;
         while let Ok(data) = self.decode_one() {
             if let Some(frame) = data {
@@ -164,9 +158,7 @@ impl Thumbnailer {
         let y_plane: &[u8] = frame.buf.as_slice(0)?;
         let y_stride = frame.buf.linesize(0)? as usize;
         let u_plane: &[u8] = frame.buf.as_slice(1)?;
-        //let u_stride = frame.buf.linesize(1).unwrap() as usize;
         let v_plane: &[u8] = frame.buf.as_slice(2)?;
-        //let v_stride = frame.buf.linesize(2).unwrap() as usize;
         let img = RgbaImage::from_fn(width as u32, height as u32, |x, y| {
             let (cx, cy) = (x as usize, y as usize);
             let y = y_plane[cy * y_stride + cx] as f64;

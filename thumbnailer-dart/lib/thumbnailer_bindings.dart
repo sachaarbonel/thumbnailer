@@ -3,30 +3,41 @@ import 'dart:ffi' as ffi;
 import 'package:ffi/ffi.dart';
 
 class ThumbnailerBindings {
-  final ffi.DynamicLibrary _dylib;
+  /// Holds the symbol lookup function.
+  final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
+      _lookup;
 
-  ThumbnailerBindings(this._dylib);
+  /// The symbols are looked up in [dynamicLibrary].
+  ThumbnailerBindings(ffi.DynamicLibrary dynamicLibrary)
+      : _lookup = dynamicLibrary.lookup;
 
-  void save_image(String video_path, String thumbnail_path) {
-    // Get a reference to the C function, and put it into a variable. This code uses the typedefs defined in steps 2 and 3, along with the dynamic library variable from step 4.
-    final ThumbnailerC thumbnailer_c = _dylib
-        .lookup<ffi.NativeFunction<thumbnailer_c_func>>('thumbnailer')
-        .asFunction();
+  /// The symbols are looked up with [lookup].
+  ThumbnailerBindings.fromLookup(
+      ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
+          lookup)
+      : _lookup = lookup;
 
-    // Convert a Dart [String] to a Utf8-encoded null-terminated C string.
-    final ffi.Pointer<Utf8> video_path_c_str = Utf8.toUtf8(video_path).cast();
-    final ffi.Pointer<Utf8> thumbnail_path_c_str =
-        Utf8.toUtf8(thumbnail_path).cast();
-
-    // Call the C function.
-    thumbnailer_c(video_path_c_str, thumbnail_path_c_str);
+  void thumbnail_file({
+    required String video_path,
+    required String thumbnail_path,
+  }) {
+    final video_path_ptr = video_path.toNativeUtf8();
+    final thumbnail_path_ptr = thumbnail_path.toNativeUtf8();
+    _thumbnail_file(video_path_ptr, thumbnail_path_ptr);
   }
+
+  late final _thumbnailer_c_ptr =
+      _lookup<ffi.NativeFunction<_c_thumbnailer_c>>('thumbnail_file');
+  late final _dart_thumbnailer_c _thumbnail_file =
+      _thumbnailer_c_ptr.asFunction<_dart_thumbnailer_c>();
 }
 
-// Create a typedef with the FFI type signature of the C function.
-// Commonly used types defined by dart:ffi library include Double, Int32, NativeFunction, Pointer, Struct, Uint8, and Void.
-typedef thumbnailer_c_func = ffi.Void Function(
-    ffi.Pointer<Utf8>, ffi.Pointer<Utf8>);
+typedef _c_thumbnailer_c = ffi.Void Function(
+  ffi.Pointer<Utf8> video_path,
+  ffi.Pointer<Utf8> thumbnail_path,
+);
 
-// Create a typedef for the variable that you’ll use when calling the C function.
-typedef ThumbnailerC = void Function(ffi.Pointer<Utf8>, ffi.Pointer<Utf8>);
+typedef _dart_thumbnailer_c = void Function(
+  ffi.Pointer<Utf8> video_path,
+  ffi.Pointer<Utf8> thumbnail_path,
+);

@@ -6,8 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+libc = "*"
 thumbnailer = { path = "../thumbnailer-rs" }
 
 [lib]
-name = "thumbnailer"
+name = "thumbnail_file"
 crate-type = ["cdylib"]

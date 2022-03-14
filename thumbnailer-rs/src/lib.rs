@@ -48,17 +48,19 @@ impl Thumbnailer {
     ///     let mut th = Thumbnailer::from_path("assets/assets_bbb-vp9-opus.webm").unwrap();
     ///     th.save_image(output_path);
     ///```
-    pub fn from_path<P: ?Sized>(path: &P) -> Result<Self, ThumbnailerError>
-    where
-        P: AsRef<Path>,
+    pub fn from_path(path: String) -> Result<Self, ThumbnailerError>
+// where
+    //     P: AsRef<Path>,
     {
+        println!("from_path");
         let r = File::open(path)?;
+        println!("open");
         let ar = AccReader::with_capacity(4 * 1024, r);
 
         let mut c = Context::new(Box::new(MkvDemuxer::new()), Box::new(ar));
-
+        println!("context");
         c.read_headers()?;
-
+        println!("headers");
         let decoders = DecCodecs::from_list(&[VP9_DESCR, OPUS_DESCR, VORBIS_DESCR]);
 
         let mut video_info = None;
@@ -83,6 +85,7 @@ impl Thumbnailer {
                 }
             }
         }
+        println!("done");
         Ok(Self {
             decoders: decs,
             demuxer: c,
@@ -90,7 +93,8 @@ impl Thumbnailer {
         })
     }
 
-    pub fn save_image(&mut self, output_path: &str) {
+    pub fn save_image(&mut self, output_path: String) {
+        println!("saving image");
         let mut frame_idx = 0;
         while let Ok(data) = self.decode_one() {
             if let Some(frame) = data {
@@ -99,7 +103,7 @@ impl Thumbnailer {
                         println!("{:#?}", frame.t);
 
                         if frame.t.pts == Some(960) {
-                            self.frame_to_image(frame, self.width(), self.height(), output_path);
+                            self.frame_to_image(frame, self.width(), self.height(), &output_path);
                         }
                     }
                     _ => {}

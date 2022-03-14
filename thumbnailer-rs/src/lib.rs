@@ -42,14 +42,12 @@ pub struct Thumbnailer {
     video: Option<params::VideoInfo>,
 }
 
-// fn main() {
-//     let output_path = "assets/assets_bbb-vp9-opus.png";
-//     let mut th = Thumbnailer::from_path("assets/assets_bbb-vp9-opus.webm").unwrap();
-
-//     th.save_image(output_path);
-// }
-
 impl Thumbnailer {
+    ///```rust
+    ///     let output_path = "assets/assets_bbb-vp9-opus.png";
+    ///     let mut th = Thumbnailer::from_path("assets/assets_bbb-vp9-opus.webm").unwrap();
+    ///     th.save_image(output_path);
+    ///```
     pub fn from_path<P: ?Sized>(path: &P) -> Result<Self, ThumbnailerError>
     where
         P: AsRef<Path>,

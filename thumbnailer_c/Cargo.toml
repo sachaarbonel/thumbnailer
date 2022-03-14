@@ -9,5 +9,5 @@ edition = "2021"
 thumbnailer = { path = "../thumbnailer-rs" }
 
 [lib]
-name = "thumbnailer_c"
+name = "thumbnailer"
 crate-type = ["cdylib"]

@@ -36,18 +36,18 @@ pub enum ThumbnailerError {
     Io(#[from] std::io::Error),
 }
 
-struct Thumbnailer {
+pub struct Thumbnailer {
     decoders: HashMap<isize, DecContext>,
     demuxer: Context,
-    pub video: Option<params::VideoInfo>,
+    video: Option<params::VideoInfo>,
 }
 
-fn main() {
-    let output_path = "assets/assets_bbb-vp9-opus.png";
-    let mut th = Thumbnailer::from_path("assets/assets_bbb-vp9-opus.webm").unwrap();
+// fn main() {
+//     let output_path = "assets/assets_bbb-vp9-opus.png";
+//     let mut th = Thumbnailer::from_path("assets/assets_bbb-vp9-opus.webm").unwrap();
 
-    th.save_image(output_path);
-}
+//     th.save_image(output_path);
+// }
 
 impl Thumbnailer {
     pub fn from_path<P: ?Sized>(path: &P) -> Result<Self, ThumbnailerError>
@@ -92,7 +92,7 @@ impl Thumbnailer {
         })
     }
 
-    fn save_image(&mut self, output_path: &str) {
+    pub fn save_image(&mut self, output_path: &str) {
         let mut frame_idx = 0;
         while let Ok(data) = self.decode_one() {
             if let Some(frame) = data {
